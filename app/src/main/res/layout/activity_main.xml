@@ -1,0 +1,41 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:background="@android:color/white"> <!-- Светлый фон -->
+
+    <!-- Таймер сверху -->
+    <TextView
+        android:id="@+id/timerTextView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="20sp"
+        android:textColor="@android:color/black"
+        android:text="Время: 00:00"
+        android:layout_gravity="center_horizontal"
+        android:padding="8dp"/>
+
+    <!-- Контейнер для колонок и платформы -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <!-- Контейнер для колонок -->
+        <LinearLayout
+            android:id="@+id/columnContainer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="horizontal"
+            android:gravity="bottom"/>
+
+        <!-- Подставка для всех колонок -->
+        <View
+            android:id="@+id/platformView"
+            android:layout_width="match_parent"
+            android:layout_height="20dp"
+            android:layout_gravity="bottom"
+            android:background="@android:color/black"/> <!-- Более контрастный цвет -->
+    </FrameLayout>
+</LinearLayout>
