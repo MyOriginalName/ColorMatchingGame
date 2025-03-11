@@ -2,6 +2,8 @@ package com.example.colormatchinggame
 
 import android.annotation.SuppressLint
 import android.graphics.Color
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffColorFilter
 import android.os.Build
 import android.os.Bundle
 import android.os.CountDownTimer
@@ -9,24 +11,26 @@ import android.view.DragEvent
 import android.view.MotionEvent
 import android.view.View
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AlertDialog
+import android.graphics.drawable.VectorDrawable
 import kotlin.random.Random
 
 class MainActivity : AppCompatActivity() {
 
-    private val numColumns = 15         // Количество столбцов
-    private val numBlocks = 90          // Количество блоков
+    private val numColumns = 15        // Количество столбцов
+    private val numBlocks = 180          // Количество блоков
     private val maxBlocksPerColumn = 10 // Максимальное количество блоков в колонке
     private val blocksToFillPerColumn = maxBlocksPerColumn - 2 // Оставляем 2 пустых места
 
     // Отступы для регулировки
-    private val blockMargin = 8         // Отступы между блоками
-    private val columnSpacing = 10      // Отступы между столбцами
-    private val platformHeight = 20     // Высота подставки (платформы)
+    private val blockMargin = -8        // Отступы между блоками
+    private val columnSpacing = 13      // Отступы между столбцами
+    private val platformHeight = 55     // Высота подставки (платформы)
 
     private lateinit var columns: List<LinearLayout>
     private val blockColors: List<Int> = generateColorsForColumns(numColumns)
@@ -111,7 +115,7 @@ class MainActivity : AppCompatActivity() {
         // Получаем высоту блока
         val blockHeight = calculateBlockHeight()
         // Учитываем отступы между блоками при расчете высоты линии
-        val totalBlockHeight = blockHeight * (maxBlocksPerColumn + 1)
+        val totalBlockHeight = blockHeight * (maxBlocksPerColumn)
         val totalMarginHeight = blockMargin * (maxBlocksPerColumn + 1)
         val maxRodHeight = totalBlockHeight + totalMarginHeight
         return maxRodHeight
@@ -122,7 +126,8 @@ class MainActivity : AppCompatActivity() {
         val availableColors = listOf(
             Color.RED, Color.BLUE, Color.YELLOW, Color.GREEN,
             Color.MAGENTA, Color.CYAN, Color.BLACK, Color.GRAY,
-            Color.DKGRAY, Color.LTGRAY, Color.WHITE, Color.parseColor("#FF6347"), // Tomato
+            Color.DKGRAY, Color.LTGRAY,
+            Color.parseColor("#FF6347"), // Tomato
             Color.parseColor("#FFD700"), // Gold
             Color.parseColor("#FF1493"), // DeepPink
             Color.parseColor("#FF4500"), // OrangeRed
@@ -140,9 +145,6 @@ class MainActivity : AppCompatActivity() {
         // Возвращаем случайный порядок цветов, который не превышает количество столбцов
         return availableColors.shuffled().take(numColumns)
     }
-
-
-
 
     @SuppressLint("ClickableViewAccessibility")
     private fun addBlocksToColumns() {
@@ -165,33 +167,47 @@ class MainActivity : AppCompatActivity() {
     private fun addBlockToColumn(column: LinearLayout, block: Block) {
         if (column.childCount >= blocksToFillPerColumn) return
 
-        val blockView = View(this).apply {
-            setBackgroundColor(block.color)
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, calculateBlockHeight()
-            ).apply { setMargins(blockMargin, blockMargin, blockMargin, blockMargin) }
+        val blockView = ImageView(this).apply {
+            // Устанавливаем векторный drawable
+            setImageResource(R.drawable.block)
 
-            tag = block.id
+            // Применяем цвет к внутренней части
+            val drawable = drawable.mutate() as? VectorDrawable
+            drawable?.colorFilter = PorterDuffColorFilter(block.color, PorterDuff.Mode.SRC_IN)
+
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                calculateBlockHeight()
+            ).apply {
+                setMargins(blockMargin, blockMargin, blockMargin, blockMargin)
+            }
+
+            // Сохраняем цвет в теге
+            tag = block.color
+
+            adjustViewBounds = true
+            scaleType = ImageView.ScaleType.FIT_CENTER
+
             setOnTouchListener { view, motionEvent ->
                 val parent = view.parent as? LinearLayout ?: return@setOnTouchListener false
                 if (parent.getChildAt(0) != view) return@setOnTouchListener false
 
-                if (motionEvent.action == MotionEvent.ACTION_DOWN) {
-                    val dragShadow = View.DragShadowBuilder(view)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                        view.startDragAndDrop(null, dragShadow, view, 0)
-                    } else {
-                        @Suppress("DEPRECATION")
-                        view.startDrag(null, dragShadow, view, 0)
-                    }
+                when (motionEvent.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        val dragShadow = View.DragShadowBuilder(view)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                            view.startDragAndDrop(null, dragShadow, view, 0)
+                        } else {
+                            @Suppress("DEPRECATION")
+                            view.startDrag(null, dragShadow, view, 0)
+                        }
 
-                    // Если это первый перетаскиваемый блок, запускаем таймер
-                    if (!isGameStarted) {
-                        startGameTimer()
+                        if (!isGameStarted) {
+                            startGameTimer()
+                        }
+                        true
                     }
-                    true
-                } else {
-                    false
+                    else -> false
                 }
             }
         }
@@ -200,8 +216,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun calculateBlockHeight(): Int {
         val screenHeight = resources.displayMetrics.heightPixels
-        val blockHeight = (screenHeight / (maxBlocksPerColumn - 2) / 3).coerceIn(100, 200)
-        return blockHeight
+        return (screenHeight / (maxBlocksPerColumn - 2) / 3).coerceIn(50, 200)
     }
 
     private fun setupDragListener(column: LinearLayout) {
@@ -234,12 +249,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun isColumnWin(column: LinearLayout): Boolean {
-        val firstBlockColor = (column.getChildAt(0) as? View)?.background?.let {
-            (it as? android.graphics.drawable.ColorDrawable)?.color
-        }
+        if (column.childCount == 0) return false
+
+        // Получаем цвет первого блока
+        val firstBlock = column.getChildAt(0)
+        val firstBlockColor = firstBlock.tag as? Int ?: return false
+
+        // Проверяем, что все блоки в колонке имеют тот же цвет
         return (0 until column.childCount).all { i ->
             val child = column.getChildAt(i)
-            val blockColor = (child.background as? android.graphics.drawable.ColorDrawable)?.color
+            val blockColor = child.tag as? Int
             blockColor == firstBlockColor
         }
     }
