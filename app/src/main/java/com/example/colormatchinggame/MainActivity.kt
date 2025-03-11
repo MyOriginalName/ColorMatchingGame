@@ -17,8 +17,14 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AlertDialog
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.VectorDrawable
-import kotlin.random.Random
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.cancel
 
 class MainActivity : AppCompatActivity() {
 
@@ -39,6 +45,8 @@ class MainActivity : AppCompatActivity() {
     private var gameTimer: CountDownTimer? = null
     private var elapsedTime = 0L  // Время с начала игры
 
+    private val blockDrawableCache = mutableMapOf<Int, Drawable>()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -48,6 +56,14 @@ class MainActivity : AppCompatActivity() {
 
         setupColumns()
         addBlocksToColumns()
+    }
+
+    private fun getBlockDrawable(color: Int): Drawable {
+        return blockDrawableCache.getOrPut(color) {
+            resources.getDrawable(R.drawable.block, null).apply {
+                colorFilter = PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN)
+            }
+        }
     }
 
     private fun setupColumns() {
@@ -122,38 +138,58 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun generateColorsForColumns(numColumns: Int): List<Int> {
-        // Обновленный список с 20 яркими и различимыми цветами
         val availableColors = listOf(
-            Color.RED, Color.BLUE, Color.YELLOW, Color.GREEN,
-            Color.MAGENTA, Color.CYAN, Color.BLACK, Color.GRAY,
-            Color.DKGRAY, Color.LTGRAY,
-            Color.parseColor("#FF6347"), // Tomato
-            Color.parseColor("#FFD700"), // Gold
-            Color.parseColor("#FF1493"), // DeepPink
-            Color.parseColor("#FF4500"), // OrangeRed
-            Color.parseColor("#8A2BE2"), // BlueViolet
-            Color.parseColor("#A52A2A"), // Brown
-            Color.parseColor("#7FFF00"), // Chartreuse
-            Color.parseColor("#FF69B4"), // HotPink
-            Color.parseColor("#F0E68C"), // Khaki
-            Color.parseColor("#D2691E"), // Chocolate
-            Color.parseColor("#9932CC"), // DarkOrchid
-            Color.parseColor("#FF8C00"), // DarkOrange
-            Color.parseColor("#00CED1"), // DarkTurquoise
-            Color.parseColor("#8B0000")  // DarkRed
+            Color.parseColor("#FFB3BA"), // Soft Coral
+            Color.parseColor("#FFD8A8"), // Peach
+            Color.parseColor("#B0E57C"), // Light Lime
+            Color.parseColor("#87CEEB"), // Sky Blue
+            Color.parseColor("#DDA0DD"), // Pale Violet
+            Color.parseColor("#9ACD32"), // Gentle Olive
+            Color.parseColor("#E6E6FA"), // Lavender
+            Color.parseColor("#AFEEEE"), // Mint
+            Color.parseColor("#F5DEB3"), // Wheat
+            Color.parseColor("#D8BFD8"), // Thistle
+            Color.parseColor("#FFC0CB"), // Baby Pink
+            Color.parseColor("#98FB98"), // Pale Green
+            Color.parseColor("#B0C4DE"), // Light Steel Blue
+            Color.parseColor("#F0E68C"), // Khaki (более мягкий)
+            Color.parseColor("#EEDD82"), // Light Goldenrod
+            Color.parseColor("#CDB7F6"), // Periwinkle
+            Color.parseColor("#FFA07A"), // Light Salmon
+            Color.parseColor("#C7CEEA"), // Powder Blue
+            Color.parseColor("#F4A460"), // Sandy Brown
+            Color.parseColor("#D1E189"), // Pale Chartreuse
+            Color.parseColor("#C8A2C8"), // Lilac
+            Color.parseColor("#A2D9CE"), // Tiffany Blue
+            Color.parseColor("#E5B3BB"), // Dusty Rose
+            Color.parseColor("#B5EAD7")  // Celadon
         )
-        // Возвращаем случайный порядок цветов, который не превышает количество столбцов
-        return availableColors.shuffled().take(numColumns)
+
+        return availableColors
+            .shuffled()
+            .distinct() // Дополнительная проверка на уникальность
+            .take(numColumns)
+    }
+
+    private val scope = MainScope()
+
+    override fun onDestroy() {
+        scope.cancel()
+        super.onDestroy()
     }
 
     @SuppressLint("ClickableViewAccessibility")
     private fun addBlocksToColumns() {
-        val blocks = createBlocks().shuffled()
-        var index = 0
+        scope.launch(Dispatchers.Default) {
+            val blocks = createBlocks().shuffled()
+            var index = 0
 
-        columns.forEach { column ->
-            repeat(minOf(blocksToFillPerColumn, blocks.size - index)) {
-                addBlockToColumn(column, blocks[index++])
+            columns.forEach { column ->
+                repeat(minOf(blocksToFillPerColumn, blocks.size - index)) {
+                    withContext(Dispatchers.Main) {
+                        addBlockToColumn(column, blocks[index++])
+                    }
+                }
             }
         }
     }
@@ -169,7 +205,7 @@ class MainActivity : AppCompatActivity() {
 
         val blockView = ImageView(this).apply {
             // Устанавливаем векторный drawable
-            setImageResource(R.drawable.block)
+            setImageDrawable(getBlockDrawable(block.color))
 
             // Применяем цвет к внутренней части
             val drawable = drawable.mutate() as? VectorDrawable
@@ -242,25 +278,25 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkWinCondition() {
-        if (columns.all { isColumnWin(it) }) {
-            showWinDialog()
-            gameTimer?.cancel()  // Останавливаем таймер после победы
+        var allWin = true
+        // Параллельная проверка колонок
+        columns.forEach { column ->
+            if (!isColumnWin(column)) {
+                allWin = false
+                return@forEach
+            }
         }
+        if (allWin) showWinDialog()
     }
 
     private fun isColumnWin(column: LinearLayout): Boolean {
         if (column.childCount == 0) return false
-
-        // Получаем цвет первого блока
-        val firstBlock = column.getChildAt(0)
-        val firstBlockColor = firstBlock.tag as? Int ?: return false
-
-        // Проверяем, что все блоки в колонке имеют тот же цвет
-        return (0 until column.childCount).all { i ->
-            val child = column.getChildAt(i)
-            val blockColor = child.tag as? Int
-            blockColor == firstBlockColor
+        val firstColor = (column.getChildAt(0).tag as? Int) ?: return false
+        // Быстрая проверка через все элементы
+        for (i in 1 until column.childCount) {
+            if ((column.getChildAt(i).tag as? Int) != firstColor) return false
         }
+        return true
     }
 
     private fun startGameTimer() {
