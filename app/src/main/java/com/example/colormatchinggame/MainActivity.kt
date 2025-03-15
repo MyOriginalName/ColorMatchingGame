@@ -25,37 +25,80 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
+import android.view.animation.AlphaAnimation
+import android.view.animation.Animation
+import android.view.animation.LinearInterpolator
+import android.view.animation.ScaleAnimation
+import android.content.Intent
 
 class MainActivity : AppCompatActivity() {
 
-    private val numColumns = 15        // Количество столбцов
-    private val numBlocks = 180          // Количество блоков
-    private val maxBlocksPerColumn = 10 // Максимальное количество блоков в колонке
-    private val blocksToFillPerColumn = maxBlocksPerColumn - 2 // Оставляем 2 пустых места
-
-    // Отступы для регулировки
-    private val blockMargin = -8        // Отступы между блоками
-    private val columnSpacing = 13      // Отступы между столбцами
-    private val platformHeight = 55     // Высота подставки (платформы)
-
+    private var difficulty: Difficulty = Difficulty.MEDIUM
+    private var numColumns = 10        // Количество столбцов
+    private var numBlocks = 50        // Количество блоков
+    private var maxBlocksPerColumn = 10 // Максимальное количество блоков в колонке
+    private var blocksToFillPerColumn = maxBlocksPerColumn - 2 // Оставляем 2 пустых места
+    private var blockMargin = 0        // Отступы между блоками
+    private var columnSpacing = 13     // Отступы между столбцами
+    private var platformHeight = 55    // Высота подставки (платформы)
     private lateinit var columns: List<LinearLayout>
-    private val blockColors: List<Int> = generateColorsForColumns(numColumns)
+    private var blockColors: List<Int> = emptyList()
     private var isGameStarted = false  // Флаг начала игры
     private lateinit var timerTextView: TextView
     private var gameTimer: CountDownTimer? = null
-    private var elapsedTime = 0L  // Время с начала игры
-
+    private var elapsedTime = 0L       // Время с начала игры
     private val blockDrawableCache = mutableMapOf<Int, Drawable>()
+
+    // Добавляем MusicManager
+    private lateinit var musicManager: MusicManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        // Получаем уровень сложности из Intent
+        difficulty = intent.getStringExtra("difficulty")?.let { Difficulty.valueOf(it) } ?: Difficulty.MEDIUM
+        
+        // Настраиваем параметры игры в зависимости от сложности
+        when (difficulty) {
+            Difficulty.EASY -> {
+                numColumns = 6
+                numBlocks = 45
+                maxBlocksPerColumn = 10
+                blocksToFillPerColumn = maxBlocksPerColumn - 1
+                blockMargin = 0
+            }
+            Difficulty.MEDIUM -> {
+                numColumns = 10
+                numBlocks = 65
+                maxBlocksPerColumn = 10
+                blocksToFillPerColumn = maxBlocksPerColumn - 2
+                blockMargin = 0
+            }
+            Difficulty.HARD -> {
+                numColumns = 12
+                numBlocks = 100
+                maxBlocksPerColumn = 10
+                blocksToFillPerColumn = maxBlocksPerColumn - 1
+                blockMargin = -1
+            }
+        }
+
         // Инициализация таймера
         timerTextView = findViewById(R.id.timerTextView)
+        timerTextView.textSize = 24f
+
+        // Инициализация MusicManager
+        musicManager = MusicManager(this)
+
+        // Генерируем цвета для блоков
+        blockColors = generateColorsForColumns(numColumns)
 
         setupColumns()
         addBlocksToColumns()
+
+        // Запускаем музыку при старте игры
+        musicManager.startMusic()
     }
 
     private fun getBlockDrawable(color: Int): Drawable {
@@ -74,12 +117,11 @@ class MainActivity : AppCompatActivity() {
                     layoutParams = LinearLayout.LayoutParams(
                         0,
                         LinearLayout.LayoutParams.MATCH_PARENT,
-                        1f
+                        0.6f
                     ).apply {
                         setMargins(columnSpacing, 0, columnSpacing, 0)
                     }
                 }
-
                 // Колонка с блоками
                 val columnLayout = LinearLayout(this).apply {
                     orientation = LinearLayout.VERTICAL
@@ -90,7 +132,6 @@ class MainActivity : AppCompatActivity() {
                         LinearLayout.LayoutParams.MATCH_PARENT
                     )
                 }
-
                 // Подставка (платформа)
                 val basePlatform = View(this).apply {
                     setBackgroundColor(Color.DKGRAY)
@@ -100,26 +141,23 @@ class MainActivity : AppCompatActivity() {
                         android.view.Gravity.BOTTOM
                     )
                 }
-
                 // Линия-ориентир
                 val rodView = View(this).apply {
                     setBackgroundColor(Color.DKGRAY)
                     alpha = 0.5f
                     val rodHeight = calculateRodHeight()
                     layoutParams = FrameLayout.LayoutParams(
-                        12,  // Ширина линии
+                        17,  // Ширина линии
                         rodHeight,  // Высота линии
                         android.view.Gravity.BOTTOM or android.view.Gravity.CENTER_HORIZONTAL
                     )
                 }
-
                 // Добавляем подставку и линию в FrameLayout
                 frameLayout.addView(basePlatform)
                 frameLayout.addView(rodView)
                 frameLayout.addView(columnLayout)
                 columnContainer.addView(frameLayout)
                 setupDragListener(columnLayout)
-
                 columnLayout
             }
         } else {
@@ -131,7 +169,7 @@ class MainActivity : AppCompatActivity() {
         // Получаем высоту блока
         val blockHeight = calculateBlockHeight()
         // Учитываем отступы между блоками при расчете высоты линии
-        val totalBlockHeight = blockHeight * (maxBlocksPerColumn)
+        val totalBlockHeight = blockHeight * (maxBlocksPerColumn + 1)
         val totalMarginHeight = blockMargin * (maxBlocksPerColumn + 1)
         val maxRodHeight = totalBlockHeight + totalMarginHeight
         return maxRodHeight
@@ -164,7 +202,6 @@ class MainActivity : AppCompatActivity() {
             Color.parseColor("#E5B3BB"), // Dusty Rose
             Color.parseColor("#B5EAD7")  // Celadon
         )
-
         return availableColors
             .shuffled()
             .distinct() // Дополнительная проверка на уникальность
@@ -172,9 +209,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val scope = MainScope()
-
     override fun onDestroy() {
         scope.cancel()
+        musicManager.releaseMusic() // Освобождаем ресурсы MediaPlayer
         super.onDestroy()
     }
 
@@ -183,7 +220,6 @@ class MainActivity : AppCompatActivity() {
         scope.launch(Dispatchers.Default) {
             val blocks = createBlocks().shuffled()
             var index = 0
-
             columns.forEach { column ->
                 repeat(minOf(blocksToFillPerColumn, blocks.size - index)) {
                     withContext(Dispatchers.Main) {
@@ -196,38 +232,39 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("ClickableViewAccessibility")
     private fun createBlocks(): List<Block> {
-        return List(numBlocks) { Block(blockColors[it % numColumns], it + 1) }
+        val blocks = mutableListOf<Block>()
+        val colorsPerBlock = blockColors.size
+
+        for (i in 0 until numBlocks) {
+            val colorIndex = i % colorsPerBlock // Циклическое распределение цветов
+            blocks.add(Block(blockColors[colorIndex], i + 1))
+        }
+
+        return blocks.shuffled() // Перемешиваем блоки для случайного порядка
     }
 
     @SuppressLint("ClickableViewAccessibility")
     private fun addBlockToColumn(column: LinearLayout, block: Block) {
         if (column.childCount >= blocksToFillPerColumn) return
-
         val blockView = ImageView(this).apply {
             // Устанавливаем векторный drawable
             setImageDrawable(getBlockDrawable(block.color))
-
             // Применяем цвет к внутренней части
             val drawable = drawable.mutate() as? VectorDrawable
             drawable?.colorFilter = PorterDuffColorFilter(block.color, PorterDuff.Mode.SRC_IN)
-
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 calculateBlockHeight()
             ).apply {
                 setMargins(blockMargin, blockMargin, blockMargin, blockMargin)
             }
-
             // Сохраняем цвет в теге
             tag = block.color
-
             adjustViewBounds = true
             scaleType = ImageView.ScaleType.FIT_CENTER
-
             setOnTouchListener { view, motionEvent ->
                 val parent = view.parent as? LinearLayout ?: return@setOnTouchListener false
                 if (parent.getChildAt(0) != view) return@setOnTouchListener false
-
                 when (motionEvent.action) {
                     MotionEvent.ACTION_DOWN -> {
                         val dragShadow = View.DragShadowBuilder(view)
@@ -237,7 +274,6 @@ class MainActivity : AppCompatActivity() {
                             @Suppress("DEPRECATION")
                             view.startDrag(null, dragShadow, view, 0)
                         }
-
                         if (!isGameStarted) {
                             startGameTimer()
                         }
@@ -252,7 +288,18 @@ class MainActivity : AppCompatActivity() {
 
     private fun calculateBlockHeight(): Int {
         val screenHeight = resources.displayMetrics.heightPixels
-        return (screenHeight / (maxBlocksPerColumn - 2) / 3).coerceIn(50, 200)
+        return (screenHeight / (maxBlocksPerColumn - 1) / 2).coerceIn(70, 220) // Увеличиваем минимальный и максимальный размер
+    }
+
+    override fun onBackPressed() {
+        // Переход в меню
+        val intent = Intent(this, MenuActivity::class.java)
+        startActivity(intent)
+        finish() // Закрываем текущую активность (игру)
+        overridePendingTransition(R.anim.fade_in, R.anim.fade_out) // Анимация перехода (опционально)
+
+        // Вызываем родительский метод для корректной обработки системного поведения
+        super.onBackPressed()
     }
 
     private fun setupDragListener(column: LinearLayout) {
@@ -261,20 +308,34 @@ class MainActivity : AppCompatActivity() {
                 DragEvent.ACTION_DROP -> {
                     val draggedView = dragEvent.localState as? View ?: return@setOnDragListener false
                     val parent = draggedView.parent as? LinearLayout ?: return@setOnDragListener false
-
                     parent.removeView(draggedView)
+
                     if (column.childCount < maxBlocksPerColumn) {
                         column.addView(draggedView, 0)
+                        musicManager.playMoveSound() // Звук успешного перемещения
                     } else {
                         parent.addView(draggedView, 0)
+                        musicManager.playErrorSound() // Звук ошибки
                         Toast.makeText(this, "Нет места в колонке", Toast.LENGTH_SHORT).show()
                     }
+
                     checkWinCondition()
                     true
                 }
                 else -> true
             }
         }
+    }
+
+    private fun animateTimer(view: View) {
+        // Плавное появление текста
+        val fadeIn = AlphaAnimation(0f, 1f).apply {
+            duration = 1000 // 1 секунда
+            interpolator = LinearInterpolator()
+            fillAfter = true
+        }
+        // Запускаем обе анимации
+        view.startAnimation(fadeIn)
     }
 
     private fun checkWinCondition() {
@@ -302,7 +363,6 @@ class MainActivity : AppCompatActivity() {
     private fun startGameTimer() {
         isGameStarted = true
         elapsedTime = 0L
-
         gameTimer = object : CountDownTimer(Long.MAX_VALUE, 1000) {
             override fun onTick(millisUntilFinished: Long) {
                 elapsedTime++
@@ -310,20 +370,44 @@ class MainActivity : AppCompatActivity() {
                 val seconds = (elapsedTime % 60).toInt()
                 timerTextView.text = String.format("%02d:%02d", minutes, seconds)
             }
-
             override fun onFinish() {
                 // Здесь не будет вызвано, так как таймер работает бесконечно
             }
         }.start()
+        // Запускаем анимацию таймера
+        animateTimer(timerTextView)
     }
 
     private fun showWinDialog() {
+        // Останавливаем таймер
+        gameTimer?.cancel()
+
+        // Форматируем время
         val minutes = (elapsedTime / 60).toInt()
         val seconds = (elapsedTime % 60).toInt()
+
+        // Создаем диалоговое окно
         AlertDialog.Builder(this)
             .setTitle("Ты победил!")
             .setMessage("Поздравляем, все блоки на местах! Время: ${String.format("%02d:%02d", minutes, seconds)}")
-            .setPositiveButton("ОК") { dialog, _ -> dialog.dismiss() }
+            .setPositiveButton("ОК") { dialog, _ ->
+                dialog.dismiss()
+
+                // Переход в главное меню
+                val intent = Intent(this, MenuActivity::class.java)
+                startActivity(intent)
+                finish() // Закрываем текущую активность
+            }
             .show()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        musicManager.pauseMusic() // Приостанавливаем музыку при паузе
+    }
+
+    override fun onResume() {
+        super.onResume()
+        musicManager.resumeMusic() // Возобновляем музыку при возвращении
     }
 }
