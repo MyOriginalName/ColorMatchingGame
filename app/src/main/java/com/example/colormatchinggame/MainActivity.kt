@@ -25,27 +25,30 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
+import android.view.animation.AlphaAnimation
+import android.view.animation.Animation
+import android.view.animation.LinearInterpolator
+import android.view.animation.ScaleAnimation
 
 class MainActivity : AppCompatActivity() {
 
-    private val numColumns = 15        // Количество столбцов
-    private val numBlocks = 180          // Количество блоков
+    private val numColumns = 6        // Количество столбцов
+    private val numBlocks = 50        // Количество блоков
     private val maxBlocksPerColumn = 10 // Максимальное количество блоков в колонке
     private val blocksToFillPerColumn = maxBlocksPerColumn - 2 // Оставляем 2 пустых места
-
-    // Отступы для регулировки
-    private val blockMargin = -8        // Отступы между блоками
-    private val columnSpacing = 13      // Отступы между столбцами
-    private val platformHeight = 55     // Высота подставки (платформы)
-
+    private val blockMargin = 0        // Отступы между блоками
+    private val columnSpacing = 13     // Отступы между столбцами
+    private val platformHeight = 55    // Высота подставки (платформы)
     private lateinit var columns: List<LinearLayout>
     private val blockColors: List<Int> = generateColorsForColumns(numColumns)
     private var isGameStarted = false  // Флаг начала игры
     private lateinit var timerTextView: TextView
     private var gameTimer: CountDownTimer? = null
-    private var elapsedTime = 0L  // Время с начала игры
-
+    private var elapsedTime = 0L       // Время с начала игры
     private val blockDrawableCache = mutableMapOf<Int, Drawable>()
+
+    // Добавляем MusicManager
+    private lateinit var musicManager: MusicManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,9 +56,16 @@ class MainActivity : AppCompatActivity() {
 
         // Инициализация таймера
         timerTextView = findViewById(R.id.timerTextView)
+        timerTextView.textSize = 24f
+
+        // Инициализация MusicManager
+        musicManager = MusicManager(this)
 
         setupColumns()
         addBlocksToColumns()
+
+        // Запускаем музыку при старте игры
+        musicManager.startMusic()
     }
 
     private fun getBlockDrawable(color: Int): Drawable {
@@ -79,7 +89,6 @@ class MainActivity : AppCompatActivity() {
                         setMargins(columnSpacing, 0, columnSpacing, 0)
                     }
                 }
-
                 // Колонка с блоками
                 val columnLayout = LinearLayout(this).apply {
                     orientation = LinearLayout.VERTICAL
@@ -90,7 +99,6 @@ class MainActivity : AppCompatActivity() {
                         LinearLayout.LayoutParams.MATCH_PARENT
                     )
                 }
-
                 // Подставка (платформа)
                 val basePlatform = View(this).apply {
                     setBackgroundColor(Color.DKGRAY)
@@ -100,7 +108,6 @@ class MainActivity : AppCompatActivity() {
                         android.view.Gravity.BOTTOM
                     )
                 }
-
                 // Линия-ориентир
                 val rodView = View(this).apply {
                     setBackgroundColor(Color.DKGRAY)
@@ -112,14 +119,12 @@ class MainActivity : AppCompatActivity() {
                         android.view.Gravity.BOTTOM or android.view.Gravity.CENTER_HORIZONTAL
                     )
                 }
-
                 // Добавляем подставку и линию в FrameLayout
                 frameLayout.addView(basePlatform)
                 frameLayout.addView(rodView)
                 frameLayout.addView(columnLayout)
                 columnContainer.addView(frameLayout)
                 setupDragListener(columnLayout)
-
                 columnLayout
             }
         } else {
@@ -164,7 +169,6 @@ class MainActivity : AppCompatActivity() {
             Color.parseColor("#E5B3BB"), // Dusty Rose
             Color.parseColor("#B5EAD7")  // Celadon
         )
-
         return availableColors
             .shuffled()
             .distinct() // Дополнительная проверка на уникальность
@@ -172,9 +176,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val scope = MainScope()
-
     override fun onDestroy() {
         scope.cancel()
+        musicManager.releaseMusic() // Освобождаем ресурсы MediaPlayer
         super.onDestroy()
     }
 
@@ -183,7 +187,6 @@ class MainActivity : AppCompatActivity() {
         scope.launch(Dispatchers.Default) {
             val blocks = createBlocks().shuffled()
             var index = 0
-
             columns.forEach { column ->
                 repeat(minOf(blocksToFillPerColumn, blocks.size - index)) {
                     withContext(Dispatchers.Main) {
@@ -202,32 +205,25 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("ClickableViewAccessibility")
     private fun addBlockToColumn(column: LinearLayout, block: Block) {
         if (column.childCount >= blocksToFillPerColumn) return
-
         val blockView = ImageView(this).apply {
             // Устанавливаем векторный drawable
             setImageDrawable(getBlockDrawable(block.color))
-
             // Применяем цвет к внутренней части
             val drawable = drawable.mutate() as? VectorDrawable
             drawable?.colorFilter = PorterDuffColorFilter(block.color, PorterDuff.Mode.SRC_IN)
-
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 calculateBlockHeight()
             ).apply {
                 setMargins(blockMargin, blockMargin, blockMargin, blockMargin)
             }
-
             // Сохраняем цвет в теге
             tag = block.color
-
             adjustViewBounds = true
             scaleType = ImageView.ScaleType.FIT_CENTER
-
             setOnTouchListener { view, motionEvent ->
                 val parent = view.parent as? LinearLayout ?: return@setOnTouchListener false
                 if (parent.getChildAt(0) != view) return@setOnTouchListener false
-
                 when (motionEvent.action) {
                     MotionEvent.ACTION_DOWN -> {
                         val dragShadow = View.DragShadowBuilder(view)
@@ -237,7 +233,6 @@ class MainActivity : AppCompatActivity() {
                             @Suppress("DEPRECATION")
                             view.startDrag(null, dragShadow, view, 0)
                         }
-
                         if (!isGameStarted) {
                             startGameTimer()
                         }
@@ -261,7 +256,6 @@ class MainActivity : AppCompatActivity() {
                 DragEvent.ACTION_DROP -> {
                     val draggedView = dragEvent.localState as? View ?: return@setOnDragListener false
                     val parent = draggedView.parent as? LinearLayout ?: return@setOnDragListener false
-
                     parent.removeView(draggedView)
                     if (column.childCount < maxBlocksPerColumn) {
                         column.addView(draggedView, 0)
@@ -275,6 +269,17 @@ class MainActivity : AppCompatActivity() {
                 else -> true
             }
         }
+    }
+
+    private fun animateTimer(view: View) {
+        // Плавное появление текста
+        val fadeIn = AlphaAnimation(0f, 1f).apply {
+            duration = 1000 // 1 секунда
+            interpolator = LinearInterpolator()
+            fillAfter = true
+        }
+        // Запускаем обе анимации
+        view.startAnimation(fadeIn)
     }
 
     private fun checkWinCondition() {
@@ -302,7 +307,6 @@ class MainActivity : AppCompatActivity() {
     private fun startGameTimer() {
         isGameStarted = true
         elapsedTime = 0L
-
         gameTimer = object : CountDownTimer(Long.MAX_VALUE, 1000) {
             override fun onTick(millisUntilFinished: Long) {
                 elapsedTime++
@@ -310,11 +314,12 @@ class MainActivity : AppCompatActivity() {
                 val seconds = (elapsedTime % 60).toInt()
                 timerTextView.text = String.format("%02d:%02d", minutes, seconds)
             }
-
             override fun onFinish() {
                 // Здесь не будет вызвано, так как таймер работает бесконечно
             }
         }.start()
+        // Запускаем анимацию таймера
+        animateTimer(timerTextView)
     }
 
     private fun showWinDialog() {
@@ -325,5 +330,15 @@ class MainActivity : AppCompatActivity() {
             .setMessage("Поздравляем, все блоки на местах! Время: ${String.format("%02d:%02d", minutes, seconds)}")
             .setPositiveButton("ОК") { dialog, _ -> dialog.dismiss() }
             .show()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        musicManager.pauseMusic() // Приостанавливаем музыку при паузе
+    }
+
+    override fun onResume() {
+        super.onResume()
+        musicManager.resumeMusic() // Возобновляем музыку при возвращении
     }
 }
