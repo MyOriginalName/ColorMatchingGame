@@ -29,6 +29,7 @@ import android.view.animation.AlphaAnimation
 import android.view.animation.Animation
 import android.view.animation.LinearInterpolator
 import android.view.animation.ScaleAnimation
+<<<<<<< HEAD
 import android.content.Intent
 
 class MainActivity : AppCompatActivity() {
@@ -41,6 +42,18 @@ class MainActivity : AppCompatActivity() {
     private var blockMargin = 0        // Отступы между блоками
     private var columnSpacing = 13     // Отступы между столбцами
     private var platformHeight = 55    // Высота подставки (платформы)
+=======
+
+class MainActivity : AppCompatActivity() {
+
+    private val numColumns = 6        // Количество столбцов
+    private val numBlocks = 50        // Количество блоков
+    private val maxBlocksPerColumn = 10 // Максимальное количество блоков в колонке
+    private val blocksToFillPerColumn = maxBlocksPerColumn - 2 // Оставляем 2 пустых места
+    private val blockMargin = 0        // Отступы между блоками
+    private val columnSpacing = 13     // Отступы между столбцами
+    private val platformHeight = 55    // Высота подставки (платформы)
+>>>>>>> origin/master
     private lateinit var columns: List<LinearLayout>
     private var blockColors: List<Int> = emptyList()
     private var isGameStarted = false  // Флаг начала игры
@@ -90,9 +103,12 @@ class MainActivity : AppCompatActivity() {
 
         // Инициализация MusicManager
         musicManager = MusicManager(this)
+<<<<<<< HEAD
 
         // Генерируем цвета для блоков
         blockColors = generateColorsForColumns(numColumns)
+=======
+>>>>>>> origin/master
 
         setupColumns()
         addBlocksToColumns()
