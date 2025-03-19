@@ -1,19 +1,19 @@
 package com.example.colormatchinggame
 
 import android.content.Context
-<<<<<<< HEAD
+
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.media.SoundPool
-=======
-import android.media.MediaPlayer
->>>>>>> origin/master
+
+
+
 
 class MusicManager(private val context: Context) {
 
     private var mediaPlayer: MediaPlayer? = null
     private val songs = intArrayOf(
-<<<<<<< HEAD
+
         R.raw.aventure_monday_mood,
         R.raw.berlin_dream_unminus,
         R.raw.migfus20_lofi_music_guitar,
@@ -51,18 +51,17 @@ class MusicManager(private val context: Context) {
     fun playErrorSound() {
         soundPool.play(errorSoundId, 0.7f, 0.7f, 0, 0, 1f)
     }
-=======
+
         R.raw.ethereal_reverie,
     )
     private var currentSongIndex = 0 // Текущая песня
->>>>>>> origin/master
 
     fun startMusic() {
         playNextSong()
     }
 
     private fun playNextSong() {
-<<<<<<< HEAD
+
         mediaPlayer?.release()
 
         // Выбор следующей песни в зависимости от режима
@@ -78,7 +77,7 @@ class MusicManager(private val context: Context) {
         }
         mediaPlayer?.isLooping = false // Отключите повторение отдельных треков
         mediaPlayer?.start()
-=======
+
         mediaPlayer?.release() // Освобождаем ресурсы предыдущего MediaPlayer
 
         // Создаём новый MediaPlayer для текущей песни
@@ -90,7 +89,7 @@ class MusicManager(private val context: Context) {
         }
 
         mediaPlayer?.start() // Начинаем воспроизведение
->>>>>>> origin/master
+
     }
 
     fun pauseMusic() {
@@ -103,7 +102,7 @@ class MusicManager(private val context: Context) {
         }
     }
 
-<<<<<<< HEAD
+
     fun setShuffle(enabled: Boolean) {
         isShuffle = enabled
     }
@@ -111,10 +110,10 @@ class MusicManager(private val context: Context) {
     fun releaseMusic() {
         mediaPlayer?.release()
         soundPool.release() // Освобождаем ресурсы SoundPool
-=======
+
     fun releaseMusic() {
         mediaPlayer?.release() // Освобождаем ресурсы
->>>>>>> origin/master
+
         mediaPlayer = null
     }
 }

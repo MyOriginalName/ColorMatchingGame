@@ -29,7 +29,7 @@ import android.view.animation.AlphaAnimation
 import android.view.animation.Animation
 import android.view.animation.LinearInterpolator
 import android.view.animation.ScaleAnimation
-<<<<<<< HEAD
+
 import android.content.Intent
 
 class MainActivity : AppCompatActivity() {
